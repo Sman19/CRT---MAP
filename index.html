@@ -1,277 +1,166 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BMW Service Locations — Vehicles Map</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMW Service Locations — Vehicles Map</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+/>
 
-  <style>
-    html, body { height: 100%; margin: 0; }
-    #map { height: 100vh; width: 100vw; }
+<style>
+  html, body { height:100%; margin:0; }
+  #map { height:100vh; width:100vw; }
 
-    .controls{
-      position:absolute; top:12px; left:12px; z-index:1000;
-      background:#fff; padding:8px 10px; border-radius:12px;
-      box-shadow:0 4px 12px rgba(0,0,0,.15);
-      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      max-width: calc(100vw - 24px);
-    }
-    .controls input{
-      padding:6px 8px; border-radius:8px; border:1px solid #ddd;
-      width: 340px; max-width: 70vw;
-    }
-    .controls button{
-      padding:6px 10px; border-radius:8px; border:1px solid #ddd;
-      cursor:pointer; background:#f6f6f6;
-    }
-    .legend{
-      position:absolute; bottom:12px; left:12px; z-index:1000;
-      background:#fff; padding:8px 10px; border-radius:12px;
-      box-shadow:0 4px 12px rgba(0,0,0,.15);
-      font-size:13px; line-height:1.35;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      max-width: calc(100vw - 24px);
-    }
-    .count{ font-weight:700; }
-    .popup-title{ font-weight:800; font-size:16px; margin-bottom:6px; }
-    .small{ font-size:12px; opacity:.8; }
-    .pill{
-      display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
-      border:1px solid #ddd; background:#fafafa; margin-left:6px; white-space:nowrap;
-    }
-    .veh{ margin-top:8px; border-top:1px solid #eee; padding-top:8px; }
-    .veh ul{ margin:6px 0 0 18px; padding:0; }
-    .veh li{ margin:2px 0; }
-    code{
-      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-    }
-  </style>
+  .controls{
+    position:absolute; top:12px; left:12px; z-index:1000;
+    background:#fff; padding:8px 10px; border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.15);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  .controls input{
+    padding:6px 8px; border-radius:8px; border:1px solid #ddd;
+    width:320px;
+  }
+
+  .legend{
+    position:absolute; bottom:12px; left:12px; z-index:1000;
+    background:#fff; padding:8px 10px; border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.15);
+    font-size:13px;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  .count{ font-weight:700; }
+  .popup-title{ font-weight:800; margin-bottom:6px; }
+  .pill{
+    display:inline-block; font-size:11px; padding:2px 8px;
+    border-radius:999px; border:1px solid #ddd; background:#fafafa;
+    margin-left:6px;
+  }
+</style>
 </head>
 
 <body>
-  <div id="map"></div>
+<div id="map"></div>
 
-  <div class="controls">
-    <input id="search" type="text" placeholder="Search servicing dealer / VIN / #12/67 / LHD / RHD…" />
-    <button id="resetBtn" title="Reset view">Reset</button>
-    <span id="shownCount"></span>
-  </div>
+<div class="controls">
+  <input id="search" placeholder="Search VIN / #12/67 / LHD / RHD">
+</div>
 
-  <div class="legend">
-    <div><span class="count" id="totalLocs">0</span> locations loaded</div>
-    <div><span class="count" id="totalVins">0</span> VIN rows loaded</div>
-    <div class="small">Data file: <code>Vehicles.csv</code></div>
-    <div class="small">Uses Column C VIN, Column D special #/67 + LHD/RHD, Column I last servicing dealer, Column L coords</div>
-  </div>
+<div class="legend">
+  <div><span class="count" id="locCount">0</span> locations</div>
+  <div><span class="count" id="vinCount">0</span> VIN rows</div>
+  <div>File: <code>vehicles.csv</code></div>
+</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""></script>
 
-  <script>
-    /**********************
-     * CONFIG
-     **********************/
-    const VEHICLES_CSV = "vehicles.csv";
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-    /**********************
-     * MAP
-     **********************/
-    const map = L.map('map', { zoomControl: true }).setView([50.6, 10.4], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+<script>
+/**************** CONFIG ****************/
+const CSV_FILE = "vehicles.csv";
 
-    const markerLayer = L.layerGroup().addTo(map);
-    const allMarkers = [];
-    const bounds = L.latLngBounds([]);
+/**************** MAP ****************/
+const map = L.map("map").setView([50, 10], 5);
 
-    const searchInput = document.getElementById('search');
-    const shownCount = document.getElementById('shownCount');
-    const totalLocs = document.getElementById('totalLocs');
-    const totalVins = document.getElementById('totalVins');
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 18,
+  attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
 
-    const esc = (s) => String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const layer = L.layerGroup().addTo(map);
+const bounds = L.latLngBounds([]);
+const markers = [];
 
-    function parseCoords(val) {
-      if (!val) return [NaN, NaN];
-      const s = String(val).trim()
-        .replace(/[()]/g, '')      // tolerate "(lat,lng)"
-        .replace(/\s+/g, '');      // remove spaces
-      const parts = s.split(',');
-      if (parts.length < 2) return [NaN, NaN];
-      const lat = parseFloat(parts[0]);
-      const lng = parseFloat(parts[1]);
-      return [lat, lng];
-    }
+const locCount = document.getElementById("locCount");
+const vinCount = document.getElementById("vinCount");
+const search = document.getElementById("search");
 
-    function normalizeCoordKey(lat, lng) {
-      // 6 decimals is ~11cm-ish; plenty for street-level clustering without splitting identical sites
-      return `${lat.toFixed(6)},${lng.toFixed(6)}`;
-    }
+function parseCoords(v){
+  if(!v) return [NaN, NaN];
+  const s = String(v).replace(/[()]/g,"").trim();
+  const p = s.split(",");
+  return [parseFloat(p[0]), parseFloat(p[1])];
+}
 
-    function formatSpecial(raw) {
-      const t = String(raw || '').trim();
-      // Handles "#00-LHD" / "#66-RHD"
-      const m = t.match(/^#?(\d{1,3})\s*[-/ ]\s*(LHD|RHD)$/i);
-      if (m) {
-        const num = String(parseInt(m[1], 10)).padStart(2, '0');
-        const side = m[2].toUpperCase();
-        return `#${num}/67 ${side}`;
+function formatSpecial(v){
+  const m = String(v||"").match(/^#?(\d+)[- /]*(LHD|RHD)/i);
+  if(!m) return v || "";
+  return `#${m[1].padStart(2,"0")}/67 ${m[2].toUpperCase()}`;
+}
+
+Papa.parse(CSV_FILE, {
+  download:true,
+  header:true,
+  skipEmptyLines:true,
+  complete: res => {
+    const rows = res.data || [];
+    vinCount.textContent = rows.length;
+
+    const fields = res.meta.fields || [];
+    const colVIN = fields[2];   // Column C
+    const colSpec = fields[3];  // Column D
+    const colDealer = fields[8];// Column I
+    const colCoords = fields[11];// Column L
+
+    const byLoc = new Map();
+
+    rows.forEach(r => {
+      const vin = (r[colVIN] || "").trim();
+      if(!vin) return;
+
+      const spec = formatSpecial(r[colSpec]);
+      const dealer = (r[colDealer] || "Service Location").trim();
+      const [lat,lng] = parseCoords(r[colCoords]);
+      if(isNaN(lat) || isNaN(lng)) return;
+
+      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      if(!byLoc.has(key)){
+        byLoc.set(key,{lat,lng,dealer,items:[]});
       }
-      return t;
-    }
+      byLoc.get(key).items.push({vin,spec});
+    });
 
-    function getByAnyKey(row, keys) {
-      for (const k of keys) {
-        if (row && row[k] != null && String(row[k]).trim() !== '') return row[k];
-      }
-      return '';
-    }
-
-    function buildPopup(locationName, lat, lng, items) {
-      const count = items.length;
-      // Show up to 50 VINs in popup to keep it snappy; still keeps all in search metadata.
-      const MAX = 50;
-      const list = items.slice(0, MAX);
-
-      return `
-        <div class="popup-title">${esc(locationName || 'Service Location')}</div>
-        <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-        <div class="small"><b>Vehicles at this location:</b> ${count}</div>
-        <div class="veh">
-          <div><b>VINs:</b>${count > MAX ? ` <span class="small">(showing first ${MAX})</span>` : ''}</div>
-          <ul>
-            ${list.map(v => `
-              <li>
-                <code>${esc(v.vin)}</code>
-                ${v.special ? `<span class="pill">${esc(v.special)}</span>` : ''}
-              </li>
-            `).join('')}
-          </ul>
-        </div>
+    byLoc.forEach(loc => {
+      const html = `
+        <div class="popup-title">${loc.dealer}</div>
+        ${loc.items.map(v =>
+          `<div><code>${v.vin}</code>
+          ${v.spec?`<span class="pill">${v.spec}</span>`:""}</div>`
+        ).join("")}
       `;
-    }
 
-    function addLocationMarker(lat, lng, locationName, items) {
-      const popupHtml = buildPopup(locationName, lat, lng, items);
-      const m = L.circleMarker([lat, lng], {
-        radius: Math.min(10, 4 + Math.ceil(items.length / 5)), // grows with number of VINs
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.85
-      }).bindPopup(popupHtml);
+      const m = L.circleMarker([loc.lat, loc.lng], {
+        radius:6, fillOpacity:0.85
+      }).bindPopup(html);
 
-      // search metadata
-      const vehSearch = items.map(v => `${v.vin} ${v.special}`).join(' ').toLowerCase();
-      m.meta = {
-        location: (locationName || '').toLowerCase(),
-        veh: vehSearch,
-        count: items.length
-      };
-
-      allMarkers.push(m);
-      bounds.extend([lat, lng]);
-    }
-
-    function renderMarkers() {
-      markerLayer.clearLayers();
-      const f = (searchInput.value || '').trim().toLowerCase();
-      let visible = 0;
-
-      for (const m of allMarkers) {
-        const hit = !f || m.meta.location.includes(f) || m.meta.veh.includes(f);
-        if (hit) { m.addTo(markerLayer); visible++; }
-      }
-
-      shownCount.textContent = `${visible} shown`;
-      totalLocs.textContent = allMarkers.length;
-
-      if (visible > 0) {
-        try { map.fitBounds(markerLayer.getBounds().pad(0.2)); } catch {}
-      }
-    }
-
-    /**********************
-     * LOAD VEHICLES CSV
-     **********************/
-    Papa.parse(VEHICLES_CSV, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results) {
-        const rows = results.data || [];
-        totalVins.textContent = rows.length;
-
-        // Build a field list so we can safely reference column positions if headers are unknown
-        const fields = (results.meta && results.meta.fields) ? results.meta.fields : [];
-
-        // Column letters by POSITION (1-indexed):
-        // C = 3rd, D = 4th, I = 9th, L = 12th
-        const colC = fields[2];
-        const colD = fields[3];
-        const colI = fields[8];
-        const colL = fields[11];
-
-        // Group VINs by normalized coordinate key
-        const byCoord = new Map();
-
-        for (const r of rows) {
-          const vin = String(getByAnyKey(r, ['VIN','vin', colC]) || '').trim();
-          if (!vin) continue;
-
-          const specialRaw = getByAnyKey(r, ['LHD/RHD','lhd_rhd','special', colD]);
-          const special = formatSpecial(specialRaw);
-
-          const servicedAt = String(getByAnyKey(r, [
-            'Most Recent Servicing Dealer',
-            'Most recent servicing dealer',
-            'most_recent_servicing_dealer',
-            'servicing_dealer',
-            colI
-          ]) || '').trim();
-
-          const coordsRaw = getByAnyKey(r, ['coords','Coordinates','coordinates', colL]);
-          const [lat, lng] = parseCoords(coordsRaw);
-          if (isNaN(lat) || isNaN(lng)) continue;
-
-          const key = normalizeCoordKey(lat, lng);
-          if (!byCoord.has(key)) byCoord.set(key, { lat, lng, servicedAt, items: [] });
-
-          // Prefer a non-empty servicedAt as the label if some rows are blank
-          const bucket = byCoord.get(key);
-          if (!bucket.servicedAt && servicedAt) bucket.servicedAt = servicedAt;
-
-          bucket.items.push({ vin, special });
-        }
-
-        // Add one marker per unique location
-        for (const [, bucket] of byCoord) {
-          const label = bucket.servicedAt || 'Service Location';
-          addLocationMarker(bucket.lat, bucket.lng, label, bucket.items);
-        }
-
-        renderMarkers();
-        if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
-      }
+      m.search = loc.items.map(v=>`${v.vin} ${v.spec}`).join(" ").toLowerCase();
+      markers.push(m);
+      m.addTo(layer);
+      bounds.extend([loc.lat, loc.lng]);
     });
 
-    searchInput.addEventListener('input', renderMarkers);
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      searchInput.value = '';
-      renderMarkers();
-      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
-    });
-  </script>
+    locCount.textContent = markers.length;
+    if(bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+  }
+});
+
+search.addEventListener("input", ()=>{
+  const f = search.value.toLowerCase();
+  layer.clearLayers();
+  markers.forEach(m=>{
+    if(!f || m.search.includes(f)) m.addTo(layer);
+  });
+});
+</script>
 </body>
 </html>
