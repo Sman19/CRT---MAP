@@ -1,3 +1,5 @@
-name,state,dealer_code,phone,street,city,zip,lat,lng,url
-BMW of Anchorage,AK,28786,(877) 583-5028,"6115 Old Seward Hwy","Anchorage","99518",61.1509,-149.8679,https://www.bmwofanchorage.com
-BMW of Montgomery,AL,731 Eastern Boulevard,Montgomery,36117,(800) 996-9705,32.366806,-86.299969,https://www.bmwofmontgomery.com/
+A,B,VIN,Special,Model,Year,Color,Market,Most Recent Servicing Dealer,Notes,X,coords
+1,CRT,WBSKG91010E123456,#12-LHD,M3 CRT,2012,Frozen Silver,EU,30749 Niederlassung München Karosserie- und Lackzentrum BMW AG,Service record verified,,48.2499,11.6518
+2,CRT,WBSKG91010E123789,#27-RHD,M3 CRT,2012,Frozen Silver,EU,33696 Autohaus J. B. Lell GmbH & Co. KG,Second owner,,49.6745,12.1603
+3,CRT,WBSKG91010E124111,#03-LHD,M3 CRT,2012,Frozen Silver,EU,Renocar a.s. Brno,Imported to CZ,,49.1515,16.6942
+4,CRT,WBSKG91010E124222,#66-RHD,M3 CRT,2012,Frozen Silver,UK,OSS-40000564 Kevin Bird Garages Ltd,Iver service,,51.5179,-0.5066
