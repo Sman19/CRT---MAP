@@ -54,6 +54,14 @@
     code{
       font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
     }
+    .popup-img{
+      width: 100%;
+      max-width: 380px;
+      height: auto;
+      border-radius: 12px;
+      margin: 6px 0 10px 0;
+      display: block;
+    }
   </style>
 </head>
 
@@ -72,7 +80,7 @@
     <div><span class="count" id="skippedNoCoords">0</span> rows missing coords</div>
     <div><span class="count" id="skippedBadCoords">0</span> rows with bad coords</div>
     <div class="small">Data file: <code>vehicles.csv</code></div>
-    <div class="small">Uses headers: VIN, LHD/RHD, Most Recent Servicing Dealer, Latitude and Longitude</div>
+    <div class="small">Image URL read from Column K (fallback)</div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -106,22 +114,17 @@
 
     const esc = (s) => String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
 
     function parseCoords(val) {
       if (!val) return [NaN, NaN];
-
-      // tolerate: "48.25, 11.62" or "(48.25,11.62)"
       const s = String(val).trim()
         .replace(/[()]/g, '')
         .replace(/\s+/g, '');
-
       const parts = s.split(',');
       if (parts.length < 2) return [NaN, NaN];
-
-      const lat = parseFloat(parts[0]);
-      const lng = parseFloat(parts[1]);
-      return [lat, lng];
+      return [parseFloat(parts[0]), parseFloat(parts[1])];
     }
 
     function normalizeCoordKey(lat, lng) {
@@ -139,13 +142,18 @@
       return t;
     }
 
-    function addLocationMarker(lat, lng, locationName, items) {
+    function addLocationMarker(lat, lng, locationName, imageUrl, items) {
       const count = items.length;
-      const MAX = 60; // keep popup sane
+      const MAX = 60;
       const list = items.slice(0, MAX);
+
+      const imgHtml = imageUrl
+        ? `<img class="popup-img" src="${esc(imageUrl)}" alt="Location image" loading="lazy" />`
+        : '';
 
       const popupHtml = `
         <div class="popup-title">${esc(locationName || 'Service Location')}</div>
+        ${imgHtml}
         <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
         <div class="small"><b>Vehicles at this location:</b> ${count}${count > MAX ? ` (showing first ${MAX})` : ''}</div>
         <div class="veh">
@@ -196,7 +204,7 @@
     }
 
     /**********************
-     * LOAD CSV (header-name based; works with leading blank column)
+     * LOAD CSV (header-name based + Column K fallback for image URL)
      **********************/
     Papa.parse(VEHICLES_CSV, {
       download: true,
@@ -204,7 +212,6 @@
       skipEmptyLines: true,
       complete: function(results) {
         const rows = results.data || [];
-        totalVins.textContent = rows.length;
 
         // Your header names (exact)
         const COL_VIN    = "VIN";
@@ -212,14 +219,24 @@
         const COL_DEALER = "Most Recent Servicing Dealer";
         const COL_COORDS = "Latitude and Longitude";
 
+        // Image URL: prefer known header names, else fallback to Column K
+        const fields = (results.meta && results.meta.fields) ? results.meta.fields : [];
+        const colKKey = fields[10]; // Column K = 11th column (0-index 10)
+
+        const IMG_HEADER_CANDIDATES = ["Image URL", "image_url", "URL", "url", "Image", "image"];
+
         let skippedNoCoords = 0;
         let skippedBadCoords = 0;
+        let countedVins = 0;
 
         const byCoord = new Map();
 
         for (const r of rows) {
-          const vin = String(r[COL_VIN] || '').trim();
-          if (!vin) continue;
+          const vinRaw = String(r[COL_VIN] || '').trim();
+          if (!vinRaw) continue;
+          if (vinRaw.toUpperCase() === "VIN") continue;
+
+          countedVins++;
 
           const special = formatSpecial(r[COL_SPEC]);
           const servicedAt = String(r[COL_DEALER] || 'Service Location').trim();
@@ -237,19 +254,37 @@
           }
 
           const key = normalizeCoordKey(lat, lng);
-          if (!byCoord.has(key)) byCoord.set(key, { lat, lng, servicedAt, items: [] });
+          if (!byCoord.has(key)) {
+            byCoord.set(key, { lat, lng, servicedAt, imageUrl: '', items: [] });
+          }
 
           const bucket = byCoord.get(key);
           if (!bucket.servicedAt && servicedAt) bucket.servicedAt = servicedAt;
 
-          bucket.items.push({ vin, special });
+          // Pull image URL from a header if available; else fallback to Column K
+          let imgUrl = '';
+          for (const h of IMG_HEADER_CANDIDATES) {
+            if (r[h] != null && String(r[h]).trim() !== '') { imgUrl = String(r[h]).trim(); break; }
+          }
+          if (!imgUrl && colKKey && r[colKKey] != null) imgUrl = String(r[colKKey]).trim();
+
+          if (!bucket.imageUrl && imgUrl) bucket.imageUrl = imgUrl;
+
+          bucket.items.push({ vin: vinRaw, special });
         }
 
+        totalVins.textContent = countedVins;
         skippedNoCoordsEl.textContent = skippedNoCoords;
         skippedBadCoordsEl.textContent = skippedBadCoords;
 
         for (const [, bucket] of byCoord) {
-          addLocationMarker(bucket.lat, bucket.lng, bucket.servicedAt || 'Service Location', bucket.items);
+          addLocationMarker(
+            bucket.lat,
+            bucket.lng,
+            bucket.servicedAt || 'Service Location',
+            bucket.imageUrl || '',
+            bucket.items
+          );
         }
 
         renderMarkers();
