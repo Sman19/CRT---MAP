@@ -1,1 +1,3 @@
-
+name,state,dealer_code,phone,street,city,zip,lat,lng,url
+BMW of Anchorage,AK,28786,(877) 583-5028,"6115 Old Seward Hwy","Anchorage","99518",61.1509,-149.8679,https://www.bmwofanchorage.com
+BMW of Montgomery,AL,731 Eastern Boulevard,Montgomery,36117,(800) 996-9705,32.366806,-86.299969,https://www.bmwofmontgomery.com/
