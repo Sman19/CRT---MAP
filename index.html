@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BMW Dealers — US + Puerto Rico</title>
+  <title>BMW Service Locations — Vehicles Map</title>
 
   <link
     rel="stylesheet"
@@ -15,45 +15,61 @@
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100vh; width: 100vw; }
-    .controls {
-      position: absolute; top: 12px; left: 12px; z-index: 1000;
-      background: #fff; padding: 8px 10px; border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,.15); display: flex; gap: 8px; align-items: center;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+
+    .controls{
+      position:absolute; top:12px; left:12px; z-index:1000;
+      background:#fff; padding:8px 10px; border-radius:12px;
+      box-shadow:0 4px 12px rgba(0,0,0,.15);
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      max-width: calc(100vw - 24px);
     }
-    .controls input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; width: 260px; }
-    .controls button { padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; cursor: pointer; background: #f6f6f6; }
-    .legend {
-      position: absolute; bottom: 12px; left: 12px; z-index: 1000;
-      background: #fff; padding: 8px 10px; border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,.15); font-size: 13px; line-height: 1.35;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    .controls input{
+      padding:6px 8px; border-radius:8px; border:1px solid #ddd;
+      width: 340px; max-width: 70vw;
     }
-    .tooltip-title { font-weight: 700; margin-bottom: 4px; font-size: 18px; }
-    .popup-header {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+    .controls button{
+      padding:6px 10px; border-radius:8px; border:1px solid #ddd;
+      cursor:pointer; background:#f6f6f6;
     }
-    .copy-btn {
-      padding: 6px 10px; border: 1px solid #ddd; border-radius: 8px;
-      background: #f6f6f6; cursor: pointer; font-size: 12px; white-space: nowrap;
+    .legend{
+      position:absolute; bottom:12px; left:12px; z-index:1000;
+      background:#fff; padding:8px 10px; border-radius:12px;
+      box-shadow:0 4px 12px rgba(0,0,0,.15);
+      font-size:13px; line-height:1.35;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      max-width: calc(100vw - 24px);
     }
-    .copy-btn:hover { background: #eee; }
-    .count { font-weight: 600; }
+    .count{ font-weight:700; }
+    .popup-title{ font-weight:800; font-size:16px; margin-bottom:6px; }
+    .small{ font-size:12px; opacity:.8; }
+    .pill{
+      display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
+      border:1px solid #ddd; background:#fafafa; margin-left:6px; white-space:nowrap;
+    }
+    .veh{ margin-top:8px; border-top:1px solid #eee; padding-top:8px; }
+    .veh ul{ margin:6px 0 0 18px; padding:0; }
+    .veh li{ margin:2px 0; }
+    code{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    }
   </style>
 </head>
+
 <body>
   <div id="map"></div>
 
   <div class="controls">
-    <input id="search" type="text" placeholder="Search dealer / state / phone…" />
+    <input id="search" type="text" placeholder="Search servicing dealer / VIN / #12/67 / LHD / RHD…" />
     <button id="resetBtn" title="Reset view">Reset</button>
     <span id="shownCount"></span>
   </div>
 
   <div class="legend">
-    <div><span class="count" id="totalCount">0</span> BMW dealers loaded</div>
-    <div>• Click a dot to see details</div>
-    <div>• Data file: <code>bmw_dealers.csv</code></div>
+    <div><span class="count" id="totalLocs">0</span> locations loaded</div>
+    <div><span class="count" id="totalVins">0</span> VIN rows loaded</div>
+    <div class="small">Data file: <code>vehicles.csv</code></div>
+    <div class="small">Uses Column C VIN, Column D special #/67 + LHD/RHD, Column I last servicing dealer, Column L coords</div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -61,7 +77,15 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <script>
-    const map = L.map('map', { zoomControl: true }).setView([39.5, -98.35], 4);
+    /**********************
+     * CONFIG
+     **********************/
+    const VEHICLES_CSV = "vehicles.csv";
+
+    /**********************
+     * MAP
+     **********************/
+    const map = L.map('map', { zoomControl: true }).setView([50.6, 10.4], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -69,105 +93,180 @@
     const markerLayer = L.layerGroup().addTo(map);
     const allMarkers = [];
     const bounds = L.latLngBounds([]);
+
     const searchInput = document.getElementById('search');
     const shownCount = document.getElementById('shownCount');
-    const totalCount = document.getElementById('totalCount');
+    const totalLocs = document.getElementById('totalLocs');
+    const totalVins = document.getElementById('totalVins');
 
-    const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    const esc = (s) => String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-    function addPoint(lat, lng, name, street = '', city = '', state = '', zip = '', phone = '', code = '', url = '') {
-      const copyText = `${name}
-${street}
-${city}, ${state}
-${phone}
-${zip}`;
+    function parseCoords(val) {
+      if (!val) return [NaN, NaN];
+      const s = String(val).trim()
+        .replace(/[()]/g, '')      // tolerate "(lat,lng)"
+        .replace(/\s+/g, '');      // remove spaces
+      const parts = s.split(',');
+      if (parts.length < 2) return [NaN, NaN];
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+      return [lat, lng];
+    }
 
-      const popupHtml = `
-        <div class="popup-header">
-          <div class="tooltip-title">${esc(name)}</div>
-          <button class="copy-btn" data-copy="${copyText.replace(/"/g, '&quot;')}" onclick="copyFromButton(this)">Copy Address</button>
+    function normalizeCoordKey(lat, lng) {
+      // 6 decimals is ~11cm-ish; plenty for street-level clustering without splitting identical sites
+      return `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    }
+
+    function formatSpecial(raw) {
+      const t = String(raw || '').trim();
+      // Handles "#00-LHD" / "#66-RHD"
+      const m = t.match(/^#?(\d{1,3})\s*[-/ ]\s*(LHD|RHD)$/i);
+      if (m) {
+        const num = String(parseInt(m[1], 10)).padStart(2, '0');
+        const side = m[2].toUpperCase();
+        return `#${num}/67 ${side}`;
+      }
+      return t;
+    }
+
+    function getByAnyKey(row, keys) {
+      for (const k of keys) {
+        if (row && row[k] != null && String(row[k]).trim() !== '') return row[k];
+      }
+      return '';
+    }
+
+    function buildPopup(locationName, lat, lng, items) {
+      const count = items.length;
+      // Show up to 50 VINs in popup to keep it snappy; still keeps all in search metadata.
+      const MAX = 50;
+      const list = items.slice(0, MAX);
+
+      return `
+        <div class="popup-title">${esc(locationName || 'Service Location')}</div>
+        <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+        <div class="small"><b>Vehicles at this location:</b> ${count}</div>
+        <div class="veh">
+          <div><b>VINs:</b>${count > MAX ? ` <span class="small">(showing first ${MAX})</span>` : ''}</div>
+          <ul>
+            ${list.map(v => `
+              <li>
+                <code>${esc(v.vin)}</code>
+                ${v.special ? `<span class="pill">${esc(v.special)}</span>` : ''}
+              </li>
+            `).join('')}
+          </ul>
         </div>
-        <div>${esc(street)}</div>
-        <div>${esc(city)}, ${esc(state)}</div>
-        <div><b>Phone:</b> ${esc(phone)} &nbsp;&nbsp; <b>Zip:</b> ${esc(zip)}</div>
-        <div><b>Dealer Code:</b> ${esc(code)}</div>
-        ${url ? `<div><a href="${esc(url)}" target="_blank" rel="noopener">Visit Website</a></div>` : ''}
       `;
+    }
 
+    function addLocationMarker(lat, lng, locationName, items) {
+      const popupHtml = buildPopup(locationName, lat, lng, items);
       const m = L.circleMarker([lat, lng], {
-        radius: 5, weight: 1, opacity: 1, fillOpacity: 0.85
+        radius: Math.min(10, 4 + Math.ceil(items.length / 5)), // grows with number of VINs
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.85
       }).bindPopup(popupHtml);
 
+      // search metadata
+      const vehSearch = items.map(v => `${v.vin} ${v.special}`).join(' ').toLowerCase();
       m.meta = {
-        name: (name||'').toLowerCase(),
-        state: (state||'').toLowerCase(),
-        code: (code||'').toLowerCase(),
-        phone: (phone||'').toLowerCase()
+        location: (locationName || '').toLowerCase(),
+        veh: vehSearch,
+        count: items.length
       };
 
       allMarkers.push(m);
       bounds.extend([lat, lng]);
     }
 
-    function copyFromButton(btn) {
-      const text = btn.getAttribute('data-copy') || '';
-      const prev = btn.textContent;
-      btn.disabled = true;
-      navigator.clipboard.writeText(text).then(() => {
-        btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
-      });
-    }
-    window.copyFromButton = copyFromButton;
-
-    function renderMarkers(filterText = '') {
+    function renderMarkers() {
       markerLayer.clearLayers();
-      const f = (filterText||'').trim().toLowerCase();
+      const f = (searchInput.value || '').trim().toLowerCase();
       let visible = 0;
 
       for (const m of allMarkers) {
-        const hit = !f || m.meta.name.includes(f) || m.meta.state.includes(f) ||
-                    m.meta.code.includes(f) || m.meta.phone.includes(f);
+        const hit = !f || m.meta.location.includes(f) || m.meta.veh.includes(f);
         if (hit) { m.addTo(markerLayer); visible++; }
       }
 
       shownCount.textContent = `${visible} shown`;
-      totalCount.textContent = allMarkers.length;
+      totalLocs.textContent = allMarkers.length;
 
       if (visible > 0) {
         try { map.fitBounds(markerLayer.getBounds().pad(0.2)); } catch {}
       }
     }
 
-    Papa.parse("bmw_dealers.csv", {
+    /**********************
+     * LOAD VEHICLES CSV
+     **********************/
+    Papa.parse(VEHICLES_CSV, {
       download: true,
       header: true,
       skipEmptyLines: true,
-      complete: function (results) {
-        results.data.forEach(function (r) {
-          const name   = (r.name || '').trim();
-          const state  = (r.state || '').trim();
-          const code   = (r.dealer_code || '').trim();
-          const phone  = (r.phone || '').trim();
-          const street = (r.street || '').trim();
-          const city   = (r.city || '').trim();
-          const zip    = (r.zip || '').trim();
-          const lat    = parseFloat(r.lat);
-          const lng    = parseFloat(r.lng);
-          const url    = (r.url || '').trim();
+      complete: function(results) {
+        const rows = results.data || [];
+        totalVins.textContent = rows.length;
 
-          if (name && !isNaN(lat) && !isNaN(lng)) {
-            addPoint(lat, lng, name, street, city, state, zip, phone, code, url);
-          }
-        });
+        // Build a field list so we can safely reference column positions if headers are unknown
+        const fields = (results.meta && results.meta.fields) ? results.meta.fields : [];
+
+        // Column letters by POSITION (1-indexed):
+        // C = 3rd, D = 4th, I = 9th, L = 12th
+        const colC = fields[2];
+        const colD = fields[3];
+        const colI = fields[8];
+        const colL = fields[11];
+
+        // Group VINs by normalized coordinate key
+        const byCoord = new Map();
+
+        for (const r of rows) {
+          const vin = String(getByAnyKey(r, ['VIN','vin', colC]) || '').trim();
+          if (!vin) continue;
+
+          const specialRaw = getByAnyKey(r, ['LHD/RHD','lhd_rhd','special', colD]);
+          const special = formatSpecial(specialRaw);
+
+          const servicedAt = String(getByAnyKey(r, [
+            'Most Recent Servicing Dealer',
+            'Most recent servicing dealer',
+            'most_recent_servicing_dealer',
+            'servicing_dealer',
+            colI
+          ]) || '').trim();
+
+          const coordsRaw = getByAnyKey(r, ['coords','Coordinates','coordinates', colL]);
+          const [lat, lng] = parseCoords(coordsRaw);
+          if (isNaN(lat) || isNaN(lng)) continue;
+
+          const key = normalizeCoordKey(lat, lng);
+          if (!byCoord.has(key)) byCoord.set(key, { lat, lng, servicedAt, items: [] });
+
+          // Prefer a non-empty servicedAt as the label if some rows are blank
+          const bucket = byCoord.get(key);
+          if (!bucket.servicedAt && servicedAt) bucket.servicedAt = servicedAt;
+
+          bucket.items.push({ vin, special });
+        }
+
+        // Add one marker per unique location
+        for (const [, bucket] of byCoord) {
+          const label = bucket.servicedAt || 'Service Location';
+          addLocationMarker(bucket.lat, bucket.lng, label, bucket.items);
+        }
 
         renderMarkers();
         if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
       }
     });
 
-    searchInput.addEventListener('input', e => renderMarkers(e.target.value));
+    searchInput.addEventListener('input', renderMarkers);
     document.getElementById('resetBtn').addEventListener('click', () => {
       searchInput.value = '';
       renderMarkers();
