@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BMW Dealers — US + Puerto Rico</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100vh; width: 100vw; }
+    .controls {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: #fff; padding: 8px 10px; border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15); display: flex; gap: 8px; align-items: center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .controls input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; width: 260px; }
+    .controls button { padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; cursor: pointer; background: #f6f6f6; }
+    .legend {
+      position: absolute; bottom: 12px; left: 12px; z-index: 1000;
+      background: #fff; padding: 8px 10px; border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15); font-size: 13px; line-height: 1.35;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .tooltip-title { font-weight: 700; margin-bottom: 4px; font-size: 18px; }
+    .popup-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+    }
+    .copy-btn {
+      padding: 6px 10px; border: 1px solid #ddd; border-radius: 8px;
+      background: #f6f6f6; cursor: pointer; font-size: 12px; white-space: nowrap;
+    }
+    .copy-btn:hover { background: #eee; }
+    .count { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="controls">
+    <input id="search" type="text" placeholder="Search dealer / state / phone…" />
+    <button id="resetBtn" title="Reset view">Reset</button>
+    <span id="shownCount"></span>
+  </div>
+
+  <div class="legend">
+    <div><span class="count" id="totalCount">0</span> BMW dealers loaded</div>
+    <div>• Click a dot to see details</div>
+    <div>• Data file: <code>bmw_dealers.csv</code></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    const map = L.map('map', { zoomControl: true }).setView([39.5, -98.35], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markerLayer = L.layerGroup().addTo(map);
+    const allMarkers = [];
+    const bounds = L.latLngBounds([]);
+    const searchInput = document.getElementById('search');
+    const shownCount = document.getElementById('shownCount');
+    const totalCount = document.getElementById('totalCount');
+
+    const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+    function addPoint(lat, lng, name, street = '', city = '', state = '', zip = '', phone = '', code = '', url = '') {
+      const copyText = `${name}
+${street}
+${city}, ${state}
+${phone}
+${zip}`;
+
+      const popupHtml = `
+        <div class="popup-header">
+          <div class="tooltip-title">${esc(name)}</div>
+          <button class="copy-btn" data-copy="${copyText.replace(/"/g, '&quot;')}" onclick="copyFromButton(this)">Copy Address</button>
+        </div>
+        <div>${esc(street)}</div>
+        <div>${esc(city)}, ${esc(state)}</div>
+        <div><b>Phone:</b> ${esc(phone)} &nbsp;&nbsp; <b>Zip:</b> ${esc(zip)}</div>
+        <div><b>Dealer Code:</b> ${esc(code)}</div>
+        ${url ? `<div><a href="${esc(url)}" target="_blank" rel="noopener">Visit Website</a></div>` : ''}
+      `;
+
+      const m = L.circleMarker([lat, lng], {
+        radius: 5, weight: 1, opacity: 1, fillOpacity: 0.85
+      }).bindPopup(popupHtml);
+
+      m.meta = {
+        name: (name||'').toLowerCase(),
+        state: (state||'').toLowerCase(),
+        code: (code||'').toLowerCase(),
+        phone: (phone||'').toLowerCase()
+      };
+
+      allMarkers.push(m);
+      bounds.extend([lat, lng]);
+    }
+
+    function copyFromButton(btn) {
+      const text = btn.getAttribute('data-copy') || '';
+      const prev = btn.textContent;
+      btn.disabled = true;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
+      });
+    }
+    window.copyFromButton = copyFromButton;
+
+    function renderMarkers(filterText = '') {
+      markerLayer.clearLayers();
+      const f = (filterText||'').trim().toLowerCase();
+      let visible = 0;
+
+      for (const m of allMarkers) {
+        const hit = !f || m.meta.name.includes(f) || m.meta.state.includes(f) ||
+                    m.meta.code.includes(f) || m.meta.phone.includes(f);
+        if (hit) { m.addTo(markerLayer); visible++; }
+      }
+
+      shownCount.textContent = `${visible} shown`;
+      totalCount.textContent = allMarkers.length;
+
+      if (visible > 0) {
+        try { map.fitBounds(markerLayer.getBounds().pad(0.2)); } catch {}
+      }
+    }
+
+    Papa.parse("bmw_dealers.csv", {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function (results) {
+        results.data.forEach(function (r) {
+          const name   = (r.name || '').trim();
+          const state  = (r.state || '').trim();
+          const code   = (r.dealer_code || '').trim();
+          const phone  = (r.phone || '').trim();
+          const street = (r.street || '').trim();
+          const city   = (r.city || '').trim();
+          const zip    = (r.zip || '').trim();
+          const lat    = parseFloat(r.lat);
+          const lng    = parseFloat(r.lng);
+          const url    = (r.url || '').trim();
+
+          if (name && !isNaN(lat) && !isNaN(lng)) {
+            addPoint(lat, lng, name, street, city, state, zip, phone, code, url);
+          }
+        });
+
+        renderMarkers();
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+      }
+    });
+
+    searchInput.addEventListener('input', e => renderMarkers(e.target.value));
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      searchInput.value = '';
+      renderMarkers();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+    });
+  </script>
+</body>
+</html>
