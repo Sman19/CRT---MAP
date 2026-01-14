@@ -62,6 +62,28 @@
       margin: 6px 0 10px 0;
       display: block;
     }
+
+    /* Mobile tweaks (applied when JS adds body.is-mobile) */
+    body.is-mobile .controls{
+      left:10px; right:10px;
+      max-width: calc(100vw - 20px);
+    }
+    body.is-mobile .controls input{
+      width: 62vw;
+      max-width: 62vw;
+      font-size: 16px; /* prevents iOS zoom-on-focus */
+    }
+    body.is-mobile .controls button{
+      padding: 8px 12px; /* nicer tap target */
+    }
+    body.is-mobile .legend{
+      left:10px; right:10px;
+      max-width: calc(100vw - 20px);
+      font-size: 12px;
+    }
+    body.is-mobile .popup-img{
+      max-width: 92vw;
+    }
   </style>
 </head>
 
@@ -80,7 +102,7 @@
     <div><span class="count" id="skippedNoCoords">0</span> rows missing coords</div>
     <div><span class="count" id="skippedBadCoords">0</span> rows with bad coords</div>
     <div class="small">Data file: <code>vehicles.csv</code></div>
-    <div class="small">Image URL read from Column K (fallback)</div>
+    <div class="small">Uses headers: VIN, LHD/RHD, Most Recent Servicing Dealer, Latitude and Longitude, Image URL</div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -94,12 +116,36 @@
     const VEHICLES_CSV = "vehicles.csv"; // must match your GitHub filename exactly
 
     /**********************
+     * DEVICE DETECTION
+     **********************/
+    const isMobile = L.Browser.mobile; // Leaflet built-in (covers iOS/Android)
+    document.body.classList.toggle('is-mobile', isMobile);
+
+    // Optional: iOS/Android flags if you ever want platform-specific CSS
+    (function() {
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/.test(ua);
+      document.body.classList.toggle('is-ios', isIOS);
+      document.body.classList.toggle('is-android', isAndroid);
+    })();
+
+    /**********************
      * MAP
      **********************/
     const map = L.map('map', { zoomControl: true }).setView([50.6, 10.4], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
+
+    // Mobile Safari sometimes needs this to render correctly after load/orientation changes
+    setTimeout(() => map.invalidateSize(), 250);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => map.invalidateSize(), 250);
+    });
+    window.addEventListener('resize', () => {
+      if (isMobile) setTimeout(() => map.invalidateSize(), 150);
+    });
 
     const markerLayer = L.layerGroup().addTo(map);
     const allMarkers = [];
@@ -114,8 +160,7 @@
 
     const esc = (s) => String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
     function parseCoords(val) {
       if (!val) return [NaN, NaN];
@@ -204,26 +249,21 @@
     }
 
     /**********************
-     * LOAD CSV (header-name based + Column K fallback for image URL)
+     * LOAD CSV (header-name based)
      **********************/
     Papa.parse(VEHICLES_CSV, {
       download: true,
       header: true,
       skipEmptyLines: true,
+      transformHeader: h => String(h || '').trim(), // makes headers resilient to trailing spaces
       complete: function(results) {
         const rows = results.data || [];
 
-        // Your header names (exact)
         const COL_VIN    = "VIN";
         const COL_SPEC   = "LHD/RHD";
         const COL_DEALER = "Most Recent Servicing Dealer";
         const COL_COORDS = "Latitude and Longitude";
-
-        // Image URL: prefer known header names, else fallback to Column K
-        const fields = (results.meta && results.meta.fields) ? results.meta.fields : [];
-        const colKKey = fields[10]; // Column K = 11th column (0-index 10)
-
-        const IMG_HEADER_CANDIDATES = ["Image URL", "image_url", "URL", "url", "Image", "image"];
+        const COL_IMG    = "Image URL"; // Column K in your CSV
 
         let skippedNoCoords = 0;
         let skippedBadCoords = 0;
@@ -261,13 +301,7 @@
           const bucket = byCoord.get(key);
           if (!bucket.servicedAt && servicedAt) bucket.servicedAt = servicedAt;
 
-          // Pull image URL from a header if available; else fallback to Column K
-          let imgUrl = '';
-          for (const h of IMG_HEADER_CANDIDATES) {
-            if (r[h] != null && String(r[h]).trim() !== '') { imgUrl = String(r[h]).trim(); break; }
-          }
-          if (!imgUrl && colKKey && r[colKKey] != null) imgUrl = String(r[colKKey]).trim();
-
+          const imgUrl = String(r[COL_IMG] || '').trim();
           if (!bucket.imageUrl && imgUrl) bucket.imageUrl = imgUrl;
 
           bucket.items.push({ vin: vinRaw, special });
