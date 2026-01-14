@@ -35,22 +35,22 @@
 
     .legend{
       position:absolute; bottom:12px; left:12px; z-index:1000;
-      background:#fff; padding:8px 10px; border-radius:12px;
+      background:#fff; padding:10px 12px; border-radius:14px;
       box-shadow:0 4px 12px rgba(0,0,0,.15);
       font-size:13px; line-height:1.35;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       max-width: calc(100vw - 24px);
     }
-    .count{ font-weight:700; }
+    .count{ font-weight:800; }
     .small{ font-size:12px; opacity:.85; }
-    .popup-title{ font-weight:800; font-size:16px; margin-bottom:6px; }
+    .popup-title{ font-weight:900; font-size:18px; margin-bottom:8px; }
     .pill{
       display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
       border:1px solid #ddd; background:#fafafa; margin-left:6px; white-space:nowrap;
     }
-    .veh{ margin-top:8px; border-top:1px solid #eee; padding-top:8px; }
+    .veh{ margin-top:10px; border-top:1px solid #eee; padding-top:10px; }
     .veh ul{ margin:6px 0 0 18px; padding:0; }
-    .veh li{ margin:2px 0; }
+    .veh li{ margin:4px 0; }
     code{
       font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
     }
@@ -61,6 +61,21 @@
       border-radius: 12px;
       margin: 6px 0 10px 0;
       display: block;
+    }
+
+    /* Collapsible legend header */
+    .legend-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      cursor:pointer;
+      user-select:none;
+      gap:10px;
+    }
+    .legend-toggle{
+      font-size:12px;
+      opacity:.6;
+      white-space:nowrap;
     }
 
     /* Mobile tweaks (applied when JS adds body.is-mobile) */
@@ -76,14 +91,28 @@
     body.is-mobile .controls button{
       padding: 8px 12px; /* nicer tap target */
     }
+
     body.is-mobile .legend{
       left:10px; right:10px;
       max-width: calc(100vw - 20px);
-      font-size: 12px;
+      font-size: 11px;
+      padding: 10px 12px;
+      border-radius: 16px;
     }
-    body.is-mobile .popup-img{
-      max-width: 92vw;
+    body.is-mobile .legend div { margin-bottom: 4px; }
+
+    /* Default: collapsed on mobile */
+    body.is-mobile .legend-body{ display:none; }
+    body.is-mobile .legend.open .legend-body{ display:block; }
+
+    /* When expanded, don’t cover the whole map */
+    body.is-mobile .legend.open{
+      max-height: 38vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
+
+    body.is-mobile .popup-img{ max-width: 92vw; }
   </style>
 </head>
 
@@ -96,13 +125,21 @@
     <span id="shownCount"></span>
   </div>
 
-  <div class="legend">
-    <div><span class="count" id="totalLocs">0</span> locations loaded</div>
-    <div><span class="count" id="totalVins">0</span> VIN rows loaded</div>
-    <div><span class="count" id="skippedNoCoords">0</span> rows missing coords</div>
-    <div><span class="count" id="skippedBadCoords">0</span> rows with bad coords</div>
-    <div class="small">Data file: <code>vehicles.csv</code></div>
-    <div class="small">Uses headers: VIN, LHD/RHD, Most Recent Servicing Dealer, Latitude and Longitude, Image URL</div>
+  <!-- Collapsible legend (collapsed by default on mobile) -->
+  <div class="legend" id="legend">
+    <div class="legend-header" onclick="toggleLegend()">
+      <strong>Data summary</strong>
+      <span class="legend-toggle">tap</span>
+    </div>
+
+    <div class="legend-body">
+      <div><span class="count" id="totalLocs">0</span> locations loaded</div>
+      <div><span class="count" id="totalVins">0</span> VIN rows loaded</div>
+      <div><span class="count" id="skippedNoCoords">0</span> rows missing coords</div>
+      <div><span class="count" id="skippedBadCoords">0</span> rows with bad coords</div>
+      <div class="small">Data file: <code>vehicles.csv</code></div>
+      <div class="small">Uses headers: VIN, LHD/RHD, Most Recent Servicing Dealer, Latitude and Longitude, Image URL</div>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -121,14 +158,11 @@
     const isMobile = L.Browser.mobile; // Leaflet built-in (covers iOS/Android)
     document.body.classList.toggle('is-mobile', isMobile);
 
-    // Optional: iOS/Android flags if you ever want platform-specific CSS
-    (function() {
-      const ua = navigator.userAgent || '';
-      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const isAndroid = /Android/.test(ua);
-      document.body.classList.toggle('is-ios', isIOS);
-      document.body.classList.toggle('is-android', isAndroid);
-    })();
+    // Legend toggle for mobile (and usable on desktop too)
+    function toggleLegend() {
+      document.getElementById('legend').classList.toggle('open');
+    }
+    window.toggleLegend = toggleLegend;
 
     /**********************
      * MAP
@@ -138,8 +172,10 @@
       maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Mobile Safari sometimes needs this to render correctly after load/orientation changes
+    // Mobile browsers sometimes need this to render correctly
     setTimeout(() => map.invalidateSize(), 250);
+    if (isMobile) setTimeout(() => map.invalidateSize(), 500);
+
     window.addEventListener('orientationchange', () => {
       setTimeout(() => map.invalidateSize(), 250);
     });
@@ -193,7 +229,11 @@
       const list = items.slice(0, MAX);
 
       const imgHtml = imageUrl
-        ? `<img class="popup-img" src="${esc(imageUrl)}" alt="Location image" loading="lazy" />`
+        ? `
+          <a href="${esc(imageUrl)}" target="_blank" rel="noopener">
+            <img class="popup-img" src="${esc(imageUrl)}" alt="Location image" loading="lazy" />
+          </a>
+        `
         : '';
 
       const popupHtml = `
@@ -255,7 +295,7 @@
       download: true,
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => String(h || '').trim(), // makes headers resilient to trailing spaces
+      transformHeader: h => String(h || '').trim(),
       complete: function(results) {
         const rows = results.data || [];
 
@@ -263,7 +303,7 @@
         const COL_SPEC   = "LHD/RHD";
         const COL_DEALER = "Most Recent Servicing Dealer";
         const COL_COORDS = "Latitude and Longitude";
-        const COL_IMG    = "Image URL"; // Column K in your CSV
+        const COL_IMG    = "Image URL";
 
         let skippedNoCoords = 0;
         let skippedBadCoords = 0;
