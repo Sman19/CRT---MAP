@@ -14,7 +14,12 @@
 
   <style>
     html, body { height: 100%; margin: 0; }
-    #map { height: 100vh; width: 100vw; }
+
+    /* iOS / in-app browsers: use JS-set --vh instead of 100vh */
+    #map {
+      height: calc(var(--vh, 1vh) * 100);
+      width: 100vw;
+    }
 
     .controls{
       position:absolute; top:12px; left:12px; z-index:1000;
@@ -148,6 +153,19 @@
 
   <script>
     /**********************
+     * iOS / IN-APP VIEWPORT FIX (replaces 100vh)
+     **********************/
+    function setViewportHeight() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    setViewportHeight();
+    window.addEventListener('resize', setViewportHeight);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(setViewportHeight, 150);
+    });
+
+    /**********************
      * CONFIG
      **********************/
     const VEHICLES_CSV = "vehicles.csv"; // must match your GitHub filename exactly
@@ -155,10 +173,9 @@
     /**********************
      * DEVICE DETECTION
      **********************/
-    const isMobile = L.Browser.mobile; // Leaflet built-in (covers iOS/Android)
+    const isMobile = L.Browser.mobile;
     document.body.classList.toggle('is-mobile', isMobile);
 
-    // Legend toggle for mobile (and usable on desktop too)
     function toggleLegend() {
       document.getElementById('legend').classList.toggle('open');
     }
@@ -172,15 +189,13 @@
       maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Mobile browsers sometimes need this to render correctly
-    setTimeout(() => map.invalidateSize(), 250);
-    if (isMobile) setTimeout(() => map.invalidateSize(), 500);
+    // Ensure Leaflet recalculates after viewport height fixes
+    setTimeout(() => map.invalidateSize(), 300);
+    if (isMobile) setTimeout(() => map.invalidateSize(), 650);
 
     window.addEventListener('orientationchange', () => {
-      setTimeout(() => map.invalidateSize(), 250);
-    });
-    window.addEventListener('resize', () => {
-      if (isMobile) setTimeout(() => map.invalidateSize(), 150);
+      setTimeout(() => map.invalidateSize(), 350);
+      setTimeout(() => map.invalidateSize(), 800);
     });
 
     const markerLayer = L.layerGroup().addTo(map);
