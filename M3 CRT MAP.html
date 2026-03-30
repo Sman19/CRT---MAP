@@ -5,70 +5,112 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BMW Service Locations — Vehicles Map</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
     html, body { height: 100%; margin: 0; }
 
-    /* iOS / in-app browsers: use JS-set --vh instead of 100vh */
     #map {
       height: calc(var(--vh, 1vh) * 100);
       width: 100vw;
     }
 
     .controls{
-      position:absolute; top:12px; left:12px; z-index:1000;
-      background:#fff; padding:8px 10px; border-radius:12px;
+      position:absolute;
+      top:12px;
+      left:12px;
+      z-index:1000;
+      background:#fff;
+      padding:8px 10px;
+      border-radius:12px;
       box-shadow:0 4px 12px rgba(0,0,0,.15);
-      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       max-width: calc(100vw - 24px);
     }
+
     .controls input{
-      padding:6px 8px; border-radius:8px; border:1px solid #ddd;
-      width: 360px; max-width: 70vw;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid #ddd;
+      width:360px;
+      max-width:70vw;
     }
+
     .controls button{
-      padding:6px 10px; border-radius:8px; border:1px solid #ddd;
-      cursor:pointer; background:#f6f6f6;
+      padding:6px 10px;
+      border-radius:8px;
+      border:1px solid #ddd;
+      cursor:pointer;
+      background:#f6f6f6;
     }
 
     .legend{
-      position:absolute; bottom:12px; left:12px; z-index:1000;
-      background:#fff; padding:10px 12px; border-radius:14px;
+      position:absolute;
+      bottom:12px;
+      left:12px;
+      z-index:1000;
+      background:#fff;
+      padding:10px 12px;
+      border-radius:14px;
       box-shadow:0 4px 12px rgba(0,0,0,.15);
-      font-size:13px; line-height:1.35;
+      font-size:13px;
+      line-height:1.35;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       max-width: calc(100vw - 24px);
     }
+
     .count{ font-weight:800; }
     .small{ font-size:12px; opacity:.85; }
-    .popup-title{ font-weight:900; font-size:18px; margin-bottom:8px; }
-    .pill{
-      display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
-      border:1px solid #ddd; background:#fafafa; margin-left:6px; white-space:nowrap;
+
+    .popup-title{
+      font-weight:900;
+      font-size:18px;
+      margin-bottom:8px;
     }
-    .veh{ margin-top:10px; border-top:1px solid #eee; padding-top:10px; }
-    .veh ul{ margin:6px 0 0 18px; padding:0; }
+
+    .pill{
+      display:inline-block;
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid #ddd;
+      background:#fafafa;
+      margin-left:6px;
+      white-space:nowrap;
+    }
+
+    .veh{
+      margin-top:10px;
+      border-top:1px solid #eee;
+      padding-top:10px;
+    }
+
+    .veh ul{
+      margin:6px 0 0 18px;
+      padding:0;
+    }
+
     .veh li{ margin:4px 0; }
+
     code{
       font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
     }
+
     .popup-img{
-      width: 100%;
-      max-width: 380px;
-      height: auto;
-      border-radius: 12px;
-      margin: 6px 0 10px 0;
-      display: block;
+      width:100%;
+      max-width:380px;
+      height:auto;
+      border-radius:12px;
+      margin:6px 0 10px 0;
+      display:block;
     }
 
-    /* Collapsible legend header */
     .legend-header{
       display:flex;
       justify-content:space-between;
@@ -77,47 +119,108 @@
       user-select:none;
       gap:10px;
     }
+
     .legend-toggle{
       font-size:12px;
       opacity:.6;
       white-space:nowrap;
     }
 
-    /* Mobile tweaks (applied when JS adds body.is-mobile) */
     body.is-mobile .controls{
-      left:10px; right:10px;
+      left:10px;
+      right:10px;
       max-width: calc(100vw - 20px);
     }
+
     body.is-mobile .controls input{
-      width: 62vw;
-      max-width: 62vw;
-      font-size: 16px; /* prevents iOS zoom-on-focus */
+      width:62vw;
+      max-width:62vw;
+      font-size:16px;
     }
+
     body.is-mobile .controls button{
-      padding: 8px 12px; /* nicer tap target */
+      padding:8px 12px;
     }
 
     body.is-mobile .legend{
-      left:10px; right:10px;
+      left:10px;
+      right:10px;
       max-width: calc(100vw - 20px);
-      font-size: 11px;
-      padding: 10px 12px;
-      border-radius: 16px;
+      font-size:11px;
+      padding:10px 12px;
+      border-radius:16px;
     }
-    body.is-mobile .legend div { margin-bottom: 4px; }
 
-    /* Default: collapsed on mobile */
+    body.is-mobile .legend div{
+      margin-bottom:4px;
+    }
+
     body.is-mobile .legend-body{ display:none; }
     body.is-mobile .legend.open .legend-body{ display:block; }
 
-    /* When expanded, don’t cover the whole map */
     body.is-mobile .legend.open{
-      max-height: 38vh;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      max-height:38vh;
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
     }
 
-    body.is-mobile .popup-img{ max-width: 92vw; }
+    body.is-mobile .popup-img{ max-width:92vw; }
+
+    .location-marker{
+      width:18px;
+      height:18px;
+      background:#1a73e8;
+      border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      box-shadow:0 2px 6px rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.9);
+      position:relative;
+    }
+
+    .location-marker::after{
+      content:'';
+      width:8px;
+      height:8px;
+      background:#fff;
+      border-radius:50%;
+      position:absolute;
+      top:4px;
+      left:4px;
+    }
+
+    .marker-wrap{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .marker-badge{
+      position:absolute;
+      transform:translate(18px,-16px);
+      background:#111;
+      color:#fff;
+      border-radius:999px;
+      padding:2px 6px;
+      font-size:11px;
+      font-weight:700;
+      line-height:1;
+      box-shadow:0 2px 6px rgba(0,0,0,.25);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      pointer-events:none;
+    }
+
+    .maplibregl-popup-content{
+      border-radius:14px;
+      padding:12px 14px;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      min-width:260px;
+      max-width:420px;
+    }
+
+    .maplibregl-ctrl-top-right{
+      top:12px;
+      right:12px;
+    }
   </style>
 </head>
 
@@ -130,7 +233,6 @@
     <span id="shownCount"></span>
   </div>
 
-  <!-- Collapsible legend (collapsed by default on mobile) -->
   <div class="legend" id="legend">
     <div class="legend-header" onclick="toggleLegend()">
       <strong>Data summary</strong>
@@ -147,14 +249,7 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
   <script>
-    /**********************
-     * iOS / IN-APP VIEWPORT FIX (replaces 100vh)
-     **********************/
     function setViewportHeight() {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -165,15 +260,9 @@
       setTimeout(setViewportHeight, 150);
     });
 
-    /**********************
-     * CONFIG
-     **********************/
-    const m3crt_CSV = "m3crt.csv"; // must match your GitHub filename exactly
+    const m3crt_CSV = "m3crt.csv";
 
-    /**********************
-     * DEVICE DETECTION
-     **********************/
-    const isMobile = L.Browser.mobile;
+    const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
     document.body.classList.toggle('is-mobile', isMobile);
 
     function toggleLegend() {
@@ -181,26 +270,17 @@
     }
     window.toggleLegend = toggleLegend;
 
-    /**********************
-     * MAP
-     **********************/
-    const map = L.map('map', { zoomControl: true }).setView([50.6, 10.4], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Ensure Leaflet recalculates after viewport height fixes
-    setTimeout(() => map.invalidateSize(), 300);
-    if (isMobile) setTimeout(() => map.invalidateSize(), 650);
-
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => map.invalidateSize(), 350);
-      setTimeout(() => map.invalidateSize(), 800);
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/bright',
+      center: [10.4, 50.6],
+      zoom: 4.5
     });
 
-    const markerLayer = L.layerGroup().addTo(map);
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
     const allMarkers = [];
-    const bounds = L.latLngBounds([]);
+    const allPoints = [];
 
     const searchInput = document.getElementById('search');
     const shownCount = document.getElementById('shownCount');
@@ -210,8 +290,11 @@
     const skippedBadCoordsEl = document.getElementById('skippedBadCoords');
 
     const esc = (s) => String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
 
     function parseCoords(val) {
       if (!val) return [NaN, NaN];
@@ -238,7 +321,7 @@
       return t;
     }
 
-    function addLocationMarker(lat, lng, locationName, imageUrl, items) {
+    function makePopupHtml(lat, lng, locationName, imageUrl, items) {
       const count = items.length;
       const MAX = 60;
       const list = items.slice(0, MAX);
@@ -251,7 +334,7 @@
         `
         : '';
 
-      const popupHtml = `
+      return `
         <div class="popup-title">${esc(locationName || 'Service Location')}</div>
         ${imgHtml}
         <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
@@ -267,45 +350,79 @@
           </ul>
         </div>
       `;
+    }
 
-      const m = L.circleMarker([lat, lng], {
-        radius: Math.min(11, 4 + Math.ceil(count / 6)),
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.85
-      }).bindPopup(popupHtml);
+    function createMarkerElement(count) {
+      const wrap = document.createElement('div');
+      wrap.className = 'marker-wrap';
 
-      m.meta = {
+      const pin = document.createElement('div');
+      pin.className = 'location-marker';
+
+      wrap.appendChild(pin);
+
+      if (count > 1) {
+        const badge = document.createElement('div');
+        badge.className = 'marker-badge';
+        badge.textContent = count;
+        wrap.appendChild(badge);
+      }
+
+      return wrap;
+    }
+
+    function addLocationMarker(lat, lng, locationName, imageUrl, items) {
+      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
+        makePopupHtml(lat, lng, locationName, imageUrl, items)
+      );
+
+      const marker = new maplibregl.Marker({
+        element: createMarkerElement(items.length),
+        anchor: 'bottom'
+      })
+        .setLngLat([lng, lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      marker.meta = {
         location: (locationName || '').toLowerCase(),
         veh: items.map(v => `${v.vin} ${v.special}`).join(' ').toLowerCase(),
-        count
+        count: items.length
       };
 
-      allMarkers.push(m);
-      bounds.extend([lat, lng]);
+      allMarkers.push(marker);
+      allPoints.push([lng, lat]);
+    }
+
+    function getVisibleMarkers() {
+      const f = (searchInput.value || '').trim().toLowerCase();
+
+      return allMarkers.filter(m => {
+        return !f || m.meta.location.includes(f) || m.meta.veh.includes(f);
+      });
+    }
+
+    function fitToMarkers(markers) {
+      if (!markers.length) return;
+      const bounds = new maplibregl.LngLatBounds();
+      markers.forEach(m => bounds.extend(m.getLngLat()));
+      map.fitBounds(bounds, { padding: 40, maxZoom: 10 });
     }
 
     function renderMarkers() {
-      markerLayer.clearLayers();
-      const f = (searchInput.value || '').trim().toLowerCase();
-      let visible = 0;
+      const visibleMarkers = getVisibleMarkers();
 
-      for (const m of allMarkers) {
-        const hit = !f || m.meta.location.includes(f) || m.meta.veh.includes(f);
-        if (hit) { m.addTo(markerLayer); visible++; }
-      }
+      allMarkers.forEach(m => m.remove());
+      visibleMarkers.forEach(m => m.addTo(map));
 
-      shownCount.textContent = `${visible} shown`;
+      shownCount.textContent = `${visibleMarkers.length} shown`;
       totalLocs.textContent = allMarkers.length;
 
-      if (visible > 0) {
-        try { map.fitBounds(markerLayer.getBounds().pad(0.2)); } catch {}
+      if (visibleMarkers.length > 0) {
+        fitToMarkers(visibleMarkers);
       }
     }
 
-    /**********************
-     * LOAD CSV (header-name based)
-     **********************/
     Papa.parse(m3crt_CSV, {
       download: true,
       header: true,
@@ -376,16 +493,31 @@
           );
         }
 
+        totalLocs.textContent = allMarkers.length;
         renderMarkers();
-        if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+
+        if (allPoints.length) {
+          const bounds = new maplibregl.LngLatBounds();
+          allPoints.forEach(pt => bounds.extend(pt));
+          map.fitBounds(bounds, { padding: 40 });
+        }
+      },
+      error: function(err) {
+        console.error("CSV load error:", err);
       }
     });
 
     searchInput.addEventListener('input', renderMarkers);
+
     document.getElementById('resetBtn').addEventListener('click', () => {
       searchInput.value = '';
       renderMarkers();
-      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
+
+      if (allPoints.length) {
+        const bounds = new maplibregl.LngLatBounds();
+        allPoints.forEach(pt => bounds.extend(pt));
+        map.fitBounds(bounds, { padding: 40 });
+      }
     });
   </script>
 </body>
