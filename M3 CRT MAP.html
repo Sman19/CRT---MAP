@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BMW Service Locations — Vehicles Map</title>
 
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
@@ -177,62 +175,6 @@
     }
 
     body.is-mobile .popup-img{ max-width:92vw; }
-
-    .location-marker{
-      width:18px;
-      height:18px;
-      background:#1a73e8;
-      border-radius:50% 50% 50% 0;
-      transform:rotate(-45deg);
-      box-shadow:0 2px 6px rgba(0,0,0,0.35);
-      border:1px solid rgba(255,255,255,0.9);
-      position:relative;
-    }
-
-    .location-marker::after{
-      content:'';
-      width:8px;
-      height:8px;
-      background:#fff;
-      border-radius:50%;
-      position:absolute;
-      top:4px;
-      left:4px;
-    }
-
-    .marker-wrap{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-    }
-
-    .marker-badge{
-      position:absolute;
-      transform:translate(18px,-16px);
-      background:#111;
-      color:#fff;
-      border-radius:999px;
-      padding:2px 6px;
-      font-size:11px;
-      font-weight:700;
-      line-height:1;
-      box-shadow:0 2px 6px rgba(0,0,0,.25);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      pointer-events:none;
-    }
-
-    .maplibregl-popup-content{
-      border-radius:14px;
-      padding:12px 14px;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      min-width:260px;
-      max-width:420px;
-    }
-
-    .maplibregl-ctrl-top-right{
-      top:12px;
-      right:12px;
-    }
   </style>
 </head>
 
@@ -263,17 +205,23 @@
   </div>
 
   <script>
+    let map;
+    let activeInfoWindow = null;
+
+    const m3crt_CSV = "m3crt.csv";
+    const allMarkers = [];
+    const allPoints = [];
+
     function setViewportHeight() {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
     }
+
     setViewportHeight();
     window.addEventListener('resize', setViewportHeight);
     window.addEventListener('orientationchange', () => {
       setTimeout(setViewportHeight, 150);
     });
-
-    const m3crt_CSV = "m3crt.csv";
 
     const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
     document.body.classList.toggle('is-mobile', isMobile);
@@ -282,18 +230,6 @@
       document.getElementById('legend').classList.toggle('open');
     }
     window.toggleLegend = toggleLegend;
-
-    const map = new maplibregl.Map({
-      container: 'map',
-      style: 'https://tiles.openfreemap.org/styles/bright',
-      center: [10.4, 50.6],
-      zoom: 4.5
-    });
-
-    map.addControl(new maplibregl.NavigationControl(), 'top-right');
-
-    const allMarkers = [];
-    const allPoints = [];
 
     const searchInput = document.getElementById('search');
     const shownCount = document.getElementById('shownCount');
@@ -311,11 +247,14 @@
 
     function parseCoords(val) {
       if (!val) return [NaN, NaN];
+
       const s = String(val).trim()
         .replace(/[()]/g, '')
         .replace(/\s+/g, '');
+
       const parts = s.split(',');
       if (parts.length < 2) return [NaN, NaN];
+
       return [parseFloat(parts[0]), parseFloat(parts[1])];
     }
 
@@ -326,11 +265,13 @@
     function formatSpecial(raw) {
       const t = String(raw || '').trim();
       const m = t.match(/^#?(\d{1,3})\s*[-/ ]\s*(LHD|RHD)$/i);
+
       if (m) {
         const num = String(parseInt(m[1], 10)).padStart(2, '0');
         const side = m[2].toUpperCase();
         return `#${num}/67 ${side}`;
       }
+
       return t;
     }
 
@@ -348,54 +289,49 @@
         : '';
 
       return `
-        <div class="popup-title">${esc(locationName || 'Service Location')}</div>
-        ${imgHtml}
-        <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-        <div class="small"><b>Vehicles at this location:</b> ${count}${count > MAX ? ` (showing first ${MAX})` : ''}</div>
-        <div class="veh">
-          <ul>
-            ${list.map(v => `
-              <li>
-                <code>${esc(v.vin)}</code>
-                ${v.special ? `<span class="pill">${esc(v.special)}</span>` : ''}
-              </li>
-            `).join('')}
-          </ul>
+        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; min-width:260px; max-width:420px;">
+          <div class="popup-title">${esc(locationName || 'Service Location')}</div>
+          ${imgHtml}
+          <div class="small"><b>Coords:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+          <div class="small"><b>Vehicles at this location:</b> ${count}${count > MAX ? ` (showing first ${MAX})` : ''}</div>
+          <div class="veh">
+            <ul>
+              ${list.map(v => `
+                <li>
+                  <code>${esc(v.vin)}</code>
+                  ${v.special ? `<span class="pill">${esc(v.special)}</span>` : ''}
+                </li>
+              `).join('')}
+            </ul>
+          </div>
         </div>
       `;
     }
 
-    function createMarkerElement(count) {
-      const wrap = document.createElement('div');
-      wrap.className = 'marker-wrap';
-
-      const pin = document.createElement('div');
-      pin.className = 'location-marker';
-
-      wrap.appendChild(pin);
-
-      if (count > 1) {
-        const badge = document.createElement('div');
-        badge.className = 'marker-badge';
-        badge.textContent = count;
-        wrap.appendChild(badge);
-      }
-
-      return wrap;
-    }
-
     function addLocationMarker(lat, lng, locationName, imageUrl, items) {
-      const popup = new maplibregl.Popup({ offset: 20 }).setHTML(
-        makePopupHtml(lat, lng, locationName, imageUrl, items)
-      );
+      const position = { lat, lng };
 
-      const marker = new maplibregl.Marker({
-        element: createMarkerElement(items.length),
-        anchor: 'bottom'
-      })
-        .setLngLat([lng, lat])
-        .setPopup(popup)
-        .addTo(map);
+      const marker = new google.maps.Marker({
+        position,
+        map,
+        title: locationName || 'Service Location',
+        label: items.length > 1 ? {
+          text: String(items.length),
+          color: "#ffffff",
+          fontSize: "12px",
+          fontWeight: "700"
+        } : null
+      });
+
+      const infoWindow = new google.maps.InfoWindow({
+        content: makePopupHtml(lat, lng, locationName, imageUrl, items)
+      });
+
+      marker.addListener("click", () => {
+        if (activeInfoWindow) activeInfoWindow.close();
+        activeInfoWindow = infoWindow;
+        infoWindow.open(map, marker);
+      });
 
       marker.meta = {
         location: (locationName || '').toLowerCase(),
@@ -404,7 +340,7 @@
       };
 
       allMarkers.push(marker);
-      allPoints.push([lng, lat]);
+      allPoints.push(position);
     }
 
     function getVisibleMarkers() {
@@ -417,16 +353,25 @@
 
     function fitToMarkers(markers) {
       if (!markers.length) return;
-      const bounds = new maplibregl.LngLatBounds();
-      markers.forEach(m => bounds.extend(m.getLngLat()));
-      map.fitBounds(bounds, { padding: 40, maxZoom: 10 });
+
+      const bounds = new google.maps.LatLngBounds();
+
+      markers.forEach(marker => {
+        bounds.extend(marker.getPosition());
+      });
+
+      map.fitBounds(bounds);
+
+      google.maps.event.addListenerOnce(map, "bounds_changed", () => {
+        if (map.getZoom() > 10) map.setZoom(10);
+      });
     }
 
     function renderMarkers() {
       const visibleMarkers = getVisibleMarkers();
 
-      allMarkers.forEach(m => m.remove());
-      visibleMarkers.forEach(m => m.addTo(map));
+      allMarkers.forEach(m => m.setMap(null));
+      visibleMarkers.forEach(m => m.setMap(map));
 
       shownCount.textContent = `${visibleMarkers.length} shown`;
       totalLocs.textContent = allMarkers.length;
@@ -436,89 +381,115 @@
       }
     }
 
-    Papa.parse(m3crt_CSV, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: h => String(h || '').trim(),
-      complete: function(results) {
-        const rows = results.data || [];
+    function loadCSV() {
+      Papa.parse(m3crt_CSV, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: h => String(h || '').trim(),
 
-        const COL_VIN    = "VIN";
-        const COL_SPEC   = "LHD/RHD";
-        const COL_DEALER = "Most Recent Servicing Dealer";
-        const COL_COORDS = "Latitude and Longitude";
-        const COL_IMG    = "Image URL";
+        complete: function(results) {
+          const rows = results.data || [];
 
-        let skippedNoCoords = 0;
-        let skippedBadCoords = 0;
-        let countedVins = 0;
+          const COL_VIN    = "VIN";
+          const COL_SPEC   = "LHD/RHD";
+          const COL_DEALER = "Most Recent Servicing Dealer";
+          const COL_COORDS = "Latitude and Longitude";
+          const COL_IMG    = "Image URL";
 
-        const byCoord = new Map();
+          let skippedNoCoords = 0;
+          let skippedBadCoords = 0;
+          let countedVins = 0;
 
-        for (const r of rows) {
-          const vinRaw = String(r[COL_VIN] || '').trim();
-          if (!vinRaw) continue;
-          if (vinRaw.toUpperCase() === "VIN") continue;
+          const byCoord = new Map();
 
-          countedVins++;
+          for (const r of rows) {
+            const vinRaw = String(r[COL_VIN] || '').trim();
+            if (!vinRaw) continue;
+            if (vinRaw.toUpperCase() === "VIN") continue;
 
-          const special = formatSpecial(r[COL_SPEC]);
-          const servicedAt = String(r[COL_DEALER] || 'Service Location').trim();
+            countedVins++;
 
-          const coordsRaw = r[COL_COORDS];
-          if (!coordsRaw || String(coordsRaw).trim() === '') {
-            skippedNoCoords++;
-            continue;
+            const special = formatSpecial(r[COL_SPEC]);
+            const servicedAt = String(r[COL_DEALER] || 'Service Location').trim();
+
+            const coordsRaw = r[COL_COORDS];
+
+            if (!coordsRaw || String(coordsRaw).trim() === '') {
+              skippedNoCoords++;
+              continue;
+            }
+
+            const [lat, lng] = parseCoords(coordsRaw);
+
+            if (isNaN(lat) || isNaN(lng)) {
+              skippedBadCoords++;
+              continue;
+            }
+
+            const key = normalizeCoordKey(lat, lng);
+
+            if (!byCoord.has(key)) {
+              byCoord.set(key, {
+                lat,
+                lng,
+                servicedAt,
+                imageUrl: '',
+                items: []
+              });
+            }
+
+            const bucket = byCoord.get(key);
+
+            if (!bucket.servicedAt && servicedAt) {
+              bucket.servicedAt = servicedAt;
+            }
+
+            const imgUrl = String(r[COL_IMG] || '').trim();
+            if (!bucket.imageUrl && imgUrl) {
+              bucket.imageUrl = imgUrl;
+            }
+
+            bucket.items.push({ vin: vinRaw, special });
           }
 
-          const [lat, lng] = parseCoords(coordsRaw);
-          if (isNaN(lat) || isNaN(lng)) {
-            skippedBadCoords++;
-            continue;
+          totalVins.textContent = countedVins;
+          skippedNoCoordsEl.textContent = skippedNoCoords;
+          skippedBadCoordsEl.textContent = skippedBadCoords;
+
+          for (const [, bucket] of byCoord) {
+            addLocationMarker(
+              bucket.lat,
+              bucket.lng,
+              bucket.servicedAt || 'Service Location',
+              bucket.imageUrl || '',
+              bucket.items
+            );
           }
 
-          const key = normalizeCoordKey(lat, lng);
-          if (!byCoord.has(key)) {
-            byCoord.set(key, { lat, lng, servicedAt, imageUrl: '', items: [] });
-          }
+          totalLocs.textContent = allMarkers.length;
+          renderMarkers();
+        },
 
-          const bucket = byCoord.get(key);
-          if (!bucket.servicedAt && servicedAt) bucket.servicedAt = servicedAt;
-
-          const imgUrl = String(r[COL_IMG] || '').trim();
-          if (!bucket.imageUrl && imgUrl) bucket.imageUrl = imgUrl;
-
-          bucket.items.push({ vin: vinRaw, special });
+        error: function(err) {
+          console.error("CSV load error:", err);
         }
+      });
+    }
 
-        totalVins.textContent = countedVins;
-        skippedNoCoordsEl.textContent = skippedNoCoords;
-        skippedBadCoordsEl.textContent = skippedBadCoords;
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 50.6, lng: 10.4 },
+        zoom: 4.5,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true
+      });
 
-        for (const [, bucket] of byCoord) {
-          addLocationMarker(
-            bucket.lat,
-            bucket.lng,
-            bucket.servicedAt || 'Service Location',
-            bucket.imageUrl || '',
-            bucket.items
-          );
-        }
+      loadCSV();
+    }
 
-        totalLocs.textContent = allMarkers.length;
-        renderMarkers();
-
-        if (allPoints.length) {
-          const bounds = new maplibregl.LngLatBounds();
-          allPoints.forEach(pt => bounds.extend(pt));
-          map.fitBounds(bounds, { padding: 40 });
-        }
-      },
-      error: function(err) {
-        console.error("CSV load error:", err);
-      }
-    });
+    window.initMap = initMap;
 
     searchInput.addEventListener('input', renderMarkers);
 
@@ -526,12 +497,14 @@
       searchInput.value = '';
       renderMarkers();
 
-      if (allPoints.length) {
-        const bounds = new maplibregl.LngLatBounds();
-        allPoints.forEach(pt => bounds.extend(pt));
-        map.fitBounds(bounds, { padding: 40 });
+      if (allMarkers.length) {
+        fitToMarkers(allMarkers);
       }
     });
+  </script>
+
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB6wmsZHv6hoIzkt5eIcm5NVVqxQHoThcA&callback=initMap">
   </script>
 </body>
 </html>
